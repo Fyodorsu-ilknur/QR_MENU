@@ -1,0 +1,148 @@
+/* 1. FONTS & VARIABLES */
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600&display=swap');
+
+:root {
+    --ana-renk: #e67e22; 
+    --arkaplan-gri: #fdfdfd;
+}
+
+/* 2. BASE STYLES */
+body {
+    background-color: var(--arkaplan-gri);
+    font-family: 'Poppins', sans-serif;
+    color: #333;
+}
+
+.theme-bg { background-color: var(--ana-renk) !important; }
+
+/* 3. NAVBAR & LOGO */
+.navbar {
+    background-color: #ffffff !important;
+    border-bottom: 2px solid var(--ana-renk);
+    z-index: 1030;
+}
+
+.navbar-brand img {
+    max-height: 45px;
+    width: auto;
+    object-fit: contain;
+}
+
+/* 4. SIDEBAR (DESKTOP) - GRİ KUTUSUZ MODERN TASARIM */
+@media (min-width: 768px) {
+    .sidebar {
+        position: fixed;
+        top: 61px;
+        left: 0;
+        bottom: 0;
+        z-index: 100;
+        padding: 0;
+        overflow-y: auto;
+        border-right: 1px solid #f0f0f0;
+        background-color: #ffffff !important;
+    }
+}
+
+.sidebar-header {
+    border-bottom: 1px solid #f8f8f8;
+    margin-bottom: 15px;
+}
+
+/* 5. KATEGORİ BUTONLARI - GRİ KUTULARI SİLDİK */
+.kategori-btn {
+    width: 90%;
+    margin: 0 auto 5px auto;
+    text-align: left;
+    border: none !important; /* Gri çerçeveleri sildik */
+    background: transparent !important; /* Gri arka planı sildik */
+    padding: 12px 18px;
+    border-radius: 12px;
+    font-weight: 500;
+    color: #555;
+    transition: all 0.25s ease;
+    display: flex;
+    align-items: center;
+}
+
+/* Hover State: Siyahlığı engeller, tatlı bir turuncu parlama verir */
+.kategori-btn:hover, 
+.dropdown-item:hover, 
+.dropdown-item:focus {
+    background-color: rgba(230, 126, 34, 0.08) !important;
+    color: var(--ana-renk) !important;
+    outline: none !important;
+    transform: translateX(5px); /* Hafif sağa kayma efekti */
+}
+
+/* Active/Selected State: Tam turuncu */
+.kategori-btn.active, 
+.dropdown-item.active, 
+.dropdown-item:active {
+    background-color: var(--ana-renk) !important;
+    color: white !important;
+    box-shadow: 0 4px 12px rgba(230, 126, 34, 0.2);
+}
+
+/* Mavilik ve Odaklanma Engelleyici */
+.btn:focus, .btn:active, .kategori-btn:focus, #mobilKategoriBtn:focus, .dropdown-toggle:focus {
+    outline: none !important;
+    box-shadow: none !important;
+    border-color: var(--ana-renk) !important;
+}
+
+/* 6. PRODUCT CARDS */
+.urun-karti {
+    border: none !important;
+    border-radius: 20px !important;
+    background: #ffffff;
+    transition: all 0.3s ease;
+    cursor: pointer;
+}
+
+.urun-karti:hover {
+    transform: translateY(-8px);
+    box-shadow: 0 10px 25px rgba(0,0,0,0.08) !important;
+}
+
+.card-img-top {
+    border-radius: 20px 20px 0 0;
+    height: 160px;
+    object-fit: cover;
+}
+
+.fiyat-yazisi {
+    background: var(--ana-renk);
+    color: white;
+    padding: 6px 15px;
+    border-radius: 50px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    display: inline-block;
+}
+
+/* 7. MOD B BAŞLIKLAR */
+.kategori-baslik {
+    background: #fff;
+    padding: 10px 15px;
+    border-radius: 8px;
+    color: var(--ana-renk);
+    border-left: 5px solid var(--ana-renk);
+    margin: 20px 0 15px 0;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+/* Mobil Logo Özel Ayarları */
+.mobile-logo {
+    height: 50px; 
+    width: auto;
+    object-fit: contain;
+}
+
+/* Küçük ekranlarda  logoyu ortalama */
+@media (max-width: 576px) {
+    .mobile-logo {
+        height: 55px; /* Sadece logo kalınca biraz daha büyütebilirsin */
+        margin-right: 0 !important;
+    }
+}
