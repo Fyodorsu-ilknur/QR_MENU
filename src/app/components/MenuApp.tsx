@@ -29,7 +29,30 @@ export default function MenuApp({ initialProducts, businessName, businessLogo }:
         return initialProducts.some(p => !!p.ustGrupIsim);
     }, [initialProducts]);
 
-    const [activeTopCategory, setActiveTopCategory] = useState<string>("");
+    // 1. Üst Grupları (Top Categories) Çıkar
+    // Bu hesaplamayı state'den önce yapıyoruz ki state başlangıç değerini verebilelim
+    const topCategories = useMemo(() => {
+        if (hasUstGrup) {
+            const tops = Array.from(new Set(initialProducts.map(p => p.ustGrupIsim).filter(Boolean))) as string[];
+            // API'den gelen sırayı koru
+            return tops;
+        } else {
+            // Eski mantık: Sadece grup isimleri (Categories)
+            const cats = Array.from(new Set(initialProducts.map((p) => p.grupIsim)));
+            return ["Tümü", ...cats];
+        }
+    }, [initialProducts, hasUstGrup]);
+
+    // State başlangıç değeri: Eğer üst grup varsa ilk kategoriyi seç, yoksa "Tümü"
+    const [activeTopCategory, setActiveTopCategory] = useState<string>(() => {
+        if (hasUstGrup && topCategories.length > 0) {
+            return topCategories[0];
+        } else if (!hasUstGrup) {
+            return "Tümü";
+        }
+        return "";
+    });
+
     const [activeSubCategory, setActiveSubCategory] = useState<string>("");
     const [searchTerm, setSearchTerm] = useState("");
     const [isDropdownOpen, setIsDropdownOpen] = useState(false);
@@ -80,29 +103,9 @@ export default function MenuApp({ initialProducts, businessName, businessLogo }:
     }, [businessLogo]);
 
     // --- Kategori Mantığı ---
+    // topCategories yukarı taşındı.
 
-    // 1. Üst Grupları (Top Categories) Çıkar
-    // Eğer hasUstGrup false ise flat kategorileri kullanacağız, aksi halde ustGrupIsim
-    const topCategories = useMemo(() => {
-        if (hasUstGrup) {
-            const tops = Array.from(new Set(initialProducts.map(p => p.ustGrupIsim).filter(Boolean))) as string[];
-            // API'den gelen sırayı koru
-            return tops;
-        } else {
-            // Eski mantık: Sadece grup isimleri (Categories)
-            const cats = Array.from(new Set(initialProducts.map((p) => p.grupIsim)));
-            return ["Tümü", ...cats];
-        }
-    }, [initialProducts, hasUstGrup]);
-
-    // İlk açılışta veya data değiştiğinde varsayılan kategori seçimi
-    useEffect(() => {
-        if (hasUstGrup && !activeTopCategory && topCategories.length > 0) {
-            setActiveTopCategory(topCategories[0]);
-        } else if (!hasUstGrup && !activeTopCategory) {
-            setActiveTopCategory("Tümü");
-        }
-    }, [topCategories, activeTopCategory, hasUstGrup]);
+    // (Eski useEffect burada kaldırıldı)
 
     // 2. Alt Grupları (Sub Categories) Çıkar (Seçili Üst Gruba Göre)
     const subCategories = useMemo(() => {
@@ -149,9 +152,13 @@ export default function MenuApp({ initialProducts, businessName, businessLogo }:
     }, [initialProducts, activeTopCategory, activeSubCategory, searchTerm, hasUstGrup]);
 
     const handleTopCategoryClick = (cat: string) => {
-        setActiveTopCategory(cat);
+        if (activeTopCategory === cat) {
+            setActiveTopCategory("");
+        } else {
+            setActiveTopCategory(cat);
+        }
         setIsDropdownOpen(false);
-        window.scrollTo({ top: 0, behavior: "smooth" });
+        // window.scrollTo({ top: 0, behavior: "smooth" });
     };
 
     const handleSubCategoryClick = (subCat: string) => {
@@ -199,6 +206,7 @@ export default function MenuApp({ initialProducts, businessName, businessLogo }:
                         {topCategories.map((cat) => (
                             <div key={cat} className="flex flex-col">
                                 <button
+                                    type="button"
                                     onClick={() => handleTopCategoryClick(cat)}
                                     className={`cat-btn ${activeTopCategory === cat ? "active" : ""}`}
                                     style={{ justifyContent: 'space-between', width: '100%' }}
@@ -346,9 +354,19 @@ export default function MenuApp({ initialProducts, businessName, businessLogo }:
 
                     {filteredProducts.length === 0 && (
                         <div className="empty-state">
-                            <Search size={48} style={{ marginBottom: '1rem', opacity: 0.5 }} />
-                            <h3>Ürün bulunamadı</h3>
-                            <p>Bu kategoride henüz ürün yok veya arama sonucu boş.</p>
+                            {hasUstGrup && !activeTopCategory && !searchTerm ? (
+                                <>
+                                    <Utensils size={48} style={{ marginBottom: '1rem', opacity: 0.5 }} />
+                                    <h3>Hoş Geldiniz</h3>
+                                    <p>Lütfen menüden bir kategori seçiniz.</p>
+                                </>
+                            ) : (
+                                <>
+                                    <Search size={48} style={{ marginBottom: '1rem', opacity: 0.5 }} />
+                                    <h3>Ürün bulunamadı</h3>
+                                    <p>Bu kategoride henüz ürün yok veya arama sonucu boş.</p>
+                                </>
+                            )}
                         </div>
                     )}
                 </main>
