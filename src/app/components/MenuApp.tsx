@@ -2,14 +2,19 @@
 
 import { useState, useMemo, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Utensils, Search, ChefHat, Info, ChevronDown } from "lucide-react";
+import { Utensils, Search, ChefHat, Info, ChevronDown, ChevronRight } from "lucide-react";
 
 interface Product {
+    id?: number;
     urunAdi: string;
     resimYolu: string;
     aciklama: string;
     fiyat: number;
     grupIsim: string;
+    grupId?: number;
+    ustGrupIsim?: string;
+    ustGrupId?: number;
+    sira?: number;
 }
 
 interface MenuAppProps {
@@ -19,7 +24,13 @@ interface MenuAppProps {
 }
 
 export default function MenuApp({ initialProducts, businessName, businessLogo }: MenuAppProps) {
-    const [activeCategory, setActiveCategory] = useState<string>("Tümü");
+    // Görünüm mantığını belirlemek için veriyi kontrol et
+    const hasUstGrup = useMemo(() => {
+        return initialProducts.some(p => !!p.ustGrupIsim);
+    }, [initialProducts]);
+
+    const [activeTopCategory, setActiveTopCategory] = useState<string>("");
+    const [activeSubCategory, setActiveSubCategory] = useState<string>("");
     const [searchTerm, setSearchTerm] = useState("");
     const [isDropdownOpen, setIsDropdownOpen] = useState(false);
     const [logoSrc, setLogoSrc] = useState<string | null>(null);
@@ -48,23 +59,19 @@ export default function MenuApp({ initialProducts, businessName, businessLogo }:
                 return;
             }
 
-            // Zaten Base64 veya yerel yol ise direkt kullan
             if (businessLogo.startsWith("data:") || businessLogo.startsWith("/")) {
                 setLogoSrc(businessLogo);
                 return;
             }
 
-            // HTTP ile başlıyorsa (URL ise) Base64'e çevirmeyi dene
             if (businessLogo.startsWith("http")) {
                 const base64 = await getBase64(businessLogo);
                 if (base64) {
                     setLogoSrc(base64);
                 } else {
-                    // Çevrilemezse olduğu gibi kullan (fallback)
                     setLogoSrc(businessLogo);
                 }
             } else {
-                // Http/s ile başlamıyorsa ve data değilse, ham Base64 string varsayıyoruz
                 setLogoSrc(`data:image/png;base64,${businessLogo}`);
             }
         };
@@ -72,34 +79,89 @@ export default function MenuApp({ initialProducts, businessName, businessLogo }:
         loadLogo();
     }, [businessLogo]);
 
-    // Benzersiz kategorileri verimli bir şekilde ayıkla
-    const categories = useMemo(() => {
-        const cats = Array.from(new Set(initialProducts.map((p) => p.grupIsim)));
-        return ["Tümü", ...cats];
-    }, [initialProducts]);
+    // --- Kategori Mantığı ---
 
-    // Kategori ve arama terimine göre ürünleri filtrele
+    // 1. Üst Grupları (Top Categories) Çıkar
+    // Eğer hasUstGrup false ise flat kategorileri kullanacağız, aksi halde ustGrupIsim
+    const topCategories = useMemo(() => {
+        if (hasUstGrup) {
+            const tops = Array.from(new Set(initialProducts.map(p => p.ustGrupIsim).filter(Boolean))) as string[];
+            // API'den gelen sırayı koru
+            return tops;
+        } else {
+            // Eski mantık: Sadece grup isimleri (Categories)
+            const cats = Array.from(new Set(initialProducts.map((p) => p.grupIsim)));
+            return ["Tümü", ...cats];
+        }
+    }, [initialProducts, hasUstGrup]);
+
+    // İlk açılışta veya data değiştiğinde varsayılan kategori seçimi
+    useEffect(() => {
+        if (hasUstGrup && !activeTopCategory && topCategories.length > 0) {
+            setActiveTopCategory(topCategories[0]);
+        } else if (!hasUstGrup && !activeTopCategory) {
+            setActiveTopCategory("Tümü");
+        }
+    }, [topCategories, activeTopCategory, hasUstGrup]);
+
+    // 2. Alt Grupları (Sub Categories) Çıkar (Seçili Üst Gruba Göre)
+    const subCategories = useMemo(() => {
+        if (!hasUstGrup) return [];
+        if (!activeTopCategory) return [];
+
+        const subs = Array.from(new Set(
+            initialProducts
+                .filter(p => p.ustGrupIsim === activeTopCategory)
+                .map(p => p.grupIsim)
+        ));
+        return subs;
+    }, [initialProducts, activeTopCategory, hasUstGrup]);
+
+    // Üst kategori değiştiğinde ilk alt kategoriyi seç
+    useEffect(() => {
+        if (hasUstGrup && activeTopCategory && subCategories.length > 0) {
+            // Eğer mevcut seçili alt kategori yeni listede yoksa ilkini seç
+            if (!subCategories.includes(activeSubCategory)) {
+                setActiveSubCategory(subCategories[0]);
+            }
+        }
+    }, [activeTopCategory, subCategories, hasUstGrup, activeSubCategory]);
+
+
+    // 3. Ürünleri Filtrele
     const filteredProducts = useMemo(() => {
         return initialProducts.filter((p) => {
-            const matchesCategory =
-                activeCategory === "Tümü" || p.grupIsim === activeCategory;
-            const matchesSearch = p.urunAdi
-                .toLowerCase()
-                .includes(searchTerm.toLowerCase());
-            return matchesCategory && matchesSearch;
-        });
-    }, [initialProducts, activeCategory, searchTerm]);
+            // Arama filtresi her zaman geçerli
+            const matchesSearch = p.urunAdi.toLowerCase().includes(searchTerm.toLowerCase());
+            if (!matchesSearch) return false;
 
-    const handleCategoryClick = (cat: string) => {
-        setActiveCategory(cat);
+            if (hasUstGrup) {
+                // Hiyerarşik mod
+                const matchesTop = p.ustGrupIsim === activeTopCategory;
+                const matchesSub = p.grupIsim === activeSubCategory;
+                return matchesTop && matchesSub;
+            } else {
+                // Düz mod
+                const matchesCategory = activeTopCategory === "Tümü" || p.grupIsim === activeTopCategory;
+                return matchesCategory;
+            }
+        });
+    }, [initialProducts, activeTopCategory, activeSubCategory, searchTerm, hasUstGrup]);
+
+    const handleTopCategoryClick = (cat: string) => {
+        setActiveTopCategory(cat);
         setIsDropdownOpen(false);
-        // Kategori değiştiğinde yukarı kaydır
         window.scrollTo({ top: 0, behavior: "smooth" });
+    };
+
+    const handleSubCategoryClick = (subCat: string) => {
+        setActiveSubCategory(subCat);
+        // Alt kategori değiştiğinde ürünlerin başına hafifçe kaydırılabilir
+        // window.scrollTo({ top: 0, behavior: "smooth" });
     };
 
     return (
         <div className="app-layout">
-            {/* Üst Bilgi (Header) */}
             <header>
                 <div className="container header-content">
                     <div className="logo-area">
@@ -121,8 +183,6 @@ export default function MenuApp({ initialProducts, businessName, businessLogo }:
                         )}
                         <h1 className="brand-name">{logoSrc ? '' : businessName}</h1>
                     </div>
-
-                    {/* İsteğe bağlı: Basit Arama Tetikleyici veya Bilgi İkonu */}
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                         <Info size={20} color="var(--text-secondary)" />
                     </div>
@@ -130,26 +190,54 @@ export default function MenuApp({ initialProducts, businessName, businessLogo }:
             </header>
 
             <div className="container layout-grid">
-                {/* Masaüstü Yan Menü (Mobilde Gizli) */}
+                {/* --- Yan Menü (Top Categories) --- */}
                 <aside className="category-nav hidden-scrollbar desktop-only">
-                    <h3 className="product-title" style={{ marginBottom: '1rem', paddingLeft: '0.5rem', display: 'none', opacity: 0.5 }}>
-                        MENÜ
+                    <h3 className="product-title" style={{ marginBottom: '1rem', paddingLeft: '0.5rem', opacity: 0.7, fontSize: '0.9rem', textTransform: 'uppercase', letterSpacing: '1px' }}>
+                        {hasUstGrup ? 'MENÜ' : 'KATEGORİLER'}
                     </h3>
                     <div className="category-list">
-                        {categories.map((cat) => (
-                            <button
-                                key={cat}
-                                onClick={() => handleCategoryClick(cat)}
-                                className={`cat-btn ${activeCategory === cat ? "active" : ""}`}
-                            >
-                                {cat === "Tümü" ? <Search size={16} /> : <Utensils size={16} />}
-                                {cat}
-                            </button>
+                        {topCategories.map((cat) => (
+                            <div key={cat} className="flex flex-col">
+                                <button
+                                    onClick={() => handleTopCategoryClick(cat)}
+                                    className={`cat-btn ${activeTopCategory === cat ? "active" : ""}`}
+                                    style={{ justifyContent: 'space-between', width: '100%' }}
+                                >
+                                    <span className="flex items-center gap-2">
+                                        {cat === "Tümü" ? <Search size={16} /> : <Utensils size={16} />}
+                                        {cat}
+                                    </span>
+                                    {hasUstGrup && activeTopCategory === cat && (
+                                        <ChevronDown size={16} />
+                                    )}
+                                </button>
+
+                                {/* Masaüstü Alt Kategori Listesi (Accordion) */}
+                                {hasUstGrup && activeTopCategory === cat && (
+                                    <div className="sub-cat-list pl-4 mt-2 flex flex-col gap-1 border-l-2 border-gray-100 ml-4">
+                                        {subCategories.map((sub) => (
+                                            <button
+                                                key={sub}
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    handleSubCategoryClick(sub);
+                                                }}
+                                                className={`sub-cat-sidebar-btn text-left px-3 py-2 text-sm rounded-md transition-colors ${activeSubCategory === sub
+                                                    ? "text-orange-600 font-semibold bg-orange-50"
+                                                    : "text-gray-500 hover:text-gray-800 hover:bg-gray-50"
+                                                    }`}
+                                            >
+                                                {sub}
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
                         ))}
                     </div>
                 </aside>
 
-                {/* Mobil Açılır Menü (Masaüstünde Gizli) */}
+                {/* --- Mobil Dropdown (Top Categories) --- */}
                 <div className="mobile-category-dropdown mobile-only">
                     <button
                         className="dropdown-trigger"
@@ -157,7 +245,7 @@ export default function MenuApp({ initialProducts, businessName, businessLogo }:
                     >
                         <span className="flex items-center gap-2">
                             <Utensils size={18} />
-                            {activeCategory}
+                            {activeTopCategory}
                         </span>
                         <ChevronDown
                             size={18}
@@ -176,11 +264,11 @@ export default function MenuApp({ initialProducts, businessName, businessLogo }:
                                 exit={{ opacity: 0, y: -10 }}
                                 className="dropdown-menu shadow-lg"
                             >
-                                {categories.map((cat) => (
+                                {topCategories.map((cat) => (
                                     <button
                                         key={cat}
-                                        onClick={() => handleCategoryClick(cat)}
-                                        className={`dropdown-item ${activeCategory === cat ? "active" : ""}`}
+                                        onClick={() => handleTopCategoryClick(cat)}
+                                        className={`dropdown-item ${activeTopCategory === cat ? "active" : ""}`}
                                     >
                                         {cat}
                                     </button>
@@ -190,14 +278,13 @@ export default function MenuApp({ initialProducts, businessName, businessLogo }:
                     </AnimatePresence>
                 </div>
 
-                {/* Ana İçerik Alanı */}
                 <main className="products-area">
-                    {/* Arama Girişi (Mobil/Masaüstü tutarlı) */}
-                    <div style={{ marginBottom: '2rem', position: 'relative' }}>
+                    {/* Arama Alanı */}
+                    <div style={{ marginBottom: '1rem', position: 'relative' }}>
                         <Search className="text-secondary" style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)' }} size={20} />
                         <input
                             type="text"
-                            placeholder="Menüde ara..."
+                            placeholder="Ürün ara..."
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
                             style={{
@@ -213,80 +300,55 @@ export default function MenuApp({ initialProducts, businessName, businessLogo }:
                         />
                     </div>
 
-                    <div className="grid">
-                        {activeCategory === "Tümü" && !searchTerm ? (
-                            categories.filter(c => c !== "Tümü").map(cat => {
-                                const productsInCat = filteredProducts.filter(p => p.grupIsim === cat);
-                                if (productsInCat.length === 0) return null;
-
-                                return (
-                                    <>
-                                        <div key={`header-${cat}`} className="section-title">
-                                            <Utensils size={24} />
-                                            {cat}
-                                        </div>
-                                        {productsInCat.map((product) => (
-                                            <div
-                                                key={`${product.grupIsim}-${product.urunAdi}`}
-                                                className="product-card"
-                                            >
-                                                <div className="card-image-wrapper">
-                                                    <img
-                                                        src={product.resimYolu || "https://placehold.co/400x300?text=No+Image"}
-                                                        alt={product.urunAdi}
-                                                        className="card-img"
-                                                        loading="lazy"
-                                                    />
-                                                </div>
-                                                <div className="card-content">
-                                                    <h3 className="product-title">{product.urunAdi}</h3>
-                                                    <p className="product-desc">{product.aciklama}</p>
-                                                    <div className="product-footer">
-                                                        <span className="price-tag">{product.fiyat} ₺</span>
-                                                        <button className="add-btn">
-                                                            <ChefHat size={16} />
-                                                        </button>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </>
-                                );
-                            })
-                        ) : (
-                            filteredProducts.map((product) => (
-                                <div
-                                    key={`${product.grupIsim}-${product.urunAdi}`}
-                                    className="product-card"
+                    {/* --- Alt Kategoriler (Sadece Mobil İçin Pills) --- */}
+                    {hasUstGrup && subCategories.length > 0 && (
+                        <div className="sub-category-nav hidden-scrollbar mobile-only">
+                            {subCategories.map((sub) => (
+                                <button
+                                    key={sub}
+                                    onClick={() => handleSubCategoryClick(sub)}
+                                    className={`sub-cat-btn ${activeSubCategory === sub ? "active" : ""}`}
                                 >
-                                    <div className="card-image-wrapper">
-                                        <img
-                                            src={product.resimYolu || "https://placehold.co/400x300?text=No+Image"}
-                                            alt={product.urunAdi}
-                                            className="card-img"
-                                            loading="lazy"
-                                        />
-                                    </div>
-                                    <div className="card-content">
-                                        <h3 className="product-title">{product.urunAdi}</h3>
-                                        <p className="product-desc">{product.aciklama}</p>
-                                        <div className="product-footer">
-                                            <span className="price-tag">{product.fiyat} ₺</span>
-                                            <button className="add-btn">
-                                                <ChefHat size={16} />
-                                            </button>
-                                        </div>
+                                    {sub}
+                                </button>
+                            ))}
+                        </div>
+                    )}
+
+                    {/* Ürün Listesi */}
+                    <div className="grid">
+                        {filteredProducts.map((product) => (
+                            <div
+                                key={`${product.grupIsim}-${product.urunAdi}-${product.id || Math.random()}`}
+                                className="product-card"
+                            >
+                                <div className="card-image-wrapper">
+                                    <img
+                                        src={product.resimYolu || "https://placehold.co/400x300?text=No+Image"}
+                                        alt={product.urunAdi}
+                                        className="card-img"
+                                        loading="lazy"
+                                    />
+                                </div>
+                                <div className="card-content">
+                                    <h3 className="product-title">{product.urunAdi}</h3>
+                                    <p className="product-desc">{product.aciklama}</p>
+                                    <div className="product-footer">
+                                        <span className="price-tag">{product.fiyat} ₺</span>
+                                        <button className="add-btn">
+                                            <ChefHat size={16} />
+                                        </button>
                                     </div>
                                 </div>
-                            ))
-                        )}
+                            </div>
+                        ))}
                     </div>
 
                     {filteredProducts.length === 0 && (
                         <div className="empty-state">
                             <Search size={48} style={{ marginBottom: '1rem', opacity: 0.5 }} />
                             <h3>Ürün bulunamadı</h3>
-                            <p>Farklı bir arama yapmayı deneyin.</p>
+                            <p>Bu kategoride henüz ürün yok veya arama sonucu boş.</p>
                         </div>
                     )}
                 </main>
