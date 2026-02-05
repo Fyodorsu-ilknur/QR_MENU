@@ -34,8 +34,8 @@ export default function MenuApp({ initialProducts, businessName, businessLogo }:
     const topCategories = useMemo(() => {
         if (hasUstGrup) {
             const tops = Array.from(new Set(initialProducts.map(p => p.ustGrupIsim).filter(Boolean))) as string[];
-            // API'den gelen sırayı koru
-            return tops;
+            // API'den gelen sırayı koru, başa "Tümü" ekle
+            return ["Tümü", ...tops];
         } else {
             // Eski mantık: Sadece grup isimleri (Categories)
             const cats = Array.from(new Set(initialProducts.map((p) => p.grupIsim)));
@@ -43,15 +43,8 @@ export default function MenuApp({ initialProducts, businessName, businessLogo }:
         }
     }, [initialProducts, hasUstGrup]);
 
-    // State başlangıç değeri: Eğer üst grup varsa ilk kategoriyi seç, yoksa "Tümü"
-    const [activeTopCategory, setActiveTopCategory] = useState<string>(() => {
-        if (hasUstGrup && topCategories.length > 0) {
-            return topCategories[0];
-        } else if (!hasUstGrup) {
-            return "Tümü";
-        }
-        return "";
-    });
+    // State başlangıç değeri: Her zaman "Tümü"
+    const [activeTopCategory, setActiveTopCategory] = useState<string>("Tümü");
 
     const [activeSubCategory, setActiveSubCategory] = useState<string>("");
     const [searchTerm, setSearchTerm] = useState("");
@@ -122,34 +115,117 @@ export default function MenuApp({ initialProducts, businessName, businessLogo }:
 
     // Üst kategori değiştiğinde ilk alt kategoriyi seç
     useEffect(() => {
-        if (hasUstGrup && activeTopCategory && subCategories.length > 0) {
+        if (hasUstGrup && activeTopCategory && activeTopCategory !== "Tümü" && subCategories.length > 0) {
             // Eğer mevcut seçili alt kategori yeni listede yoksa ilkini seç
             if (!subCategories.includes(activeSubCategory)) {
                 setActiveSubCategory(subCategories[0]);
             }
+        } else if (activeTopCategory === "Tümü") {
+            // "Tümü" seçiliyken alt kategoriyi temizle
+            setActiveSubCategory("");
         }
     }, [activeTopCategory, subCategories, hasUstGrup, activeSubCategory]);
 
 
-    // 3. Ürünleri Filtrele
+    // 3. Ürünleri Filtrele ve Kategoriye Göre Grupla
     const filteredProducts = useMemo(() => {
-        return initialProducts.filter((p) => {
+        let products = initialProducts.filter((p) => {
             // Arama filtresi her zaman geçerli
             const matchesSearch = p.urunAdi.toLowerCase().includes(searchTerm.toLowerCase());
             if (!matchesSearch) return false;
 
+            if (activeTopCategory === "Tümü") {
+                // "Tümü" seçiliyken tüm ürünleri göster
+                return true;
+            }
+
             if (hasUstGrup) {
                 // Hiyerarşik mod
                 const matchesTop = p.ustGrupIsim === activeTopCategory;
-                const matchesSub = p.grupIsim === activeSubCategory;
+                const matchesSub = activeSubCategory ? p.grupIsim === activeSubCategory : true;
                 return matchesTop && matchesSub;
             } else {
                 // Düz mod
-                const matchesCategory = activeTopCategory === "Tümü" || p.grupIsim === activeTopCategory;
-                return matchesCategory;
+                return p.grupIsim === activeTopCategory;
             }
         });
-    }, [initialProducts, activeTopCategory, activeSubCategory, searchTerm, hasUstGrup]);
+
+        // "Tümü" seçiliyken ürünleri kategori sırasına göre sırala
+        if (activeTopCategory === "Tümü") {
+            products.sort((a, b) => {
+                // Önce üst grup sırasına göre (varsa)
+                if (hasUstGrup) {
+                    if (a.ustGrupIsim !== b.ustGrupIsim) {
+                        const aUstIndex = topCategories.indexOf(a.ustGrupIsim || "");
+                        const bUstIndex = topCategories.indexOf(b.ustGrupIsim || "");
+                        if (aUstIndex !== bUstIndex) return aUstIndex - bUstIndex;
+                    }
+                    // Aynı üst grupta ise alt grup sırasına göre
+                    if (a.grupIsim !== b.grupIsim) {
+                        const aGrupIndex = initialProducts.findIndex(p => p.grupIsim === a.grupIsim);
+                        const bGrupIndex = initialProducts.findIndex(p => p.grupIsim === b.grupIsim);
+                        return aGrupIndex - bGrupIndex;
+                    }
+                } else {
+                    // Üst grup yoksa sadece grup sırasına göre
+                    if (a.grupIsim !== b.grupIsim) {
+                        const aGrupIndex = initialProducts.findIndex(p => p.grupIsim === a.grupIsim);
+                        const bGrupIndex = initialProducts.findIndex(p => p.grupIsim === b.grupIsim);
+                        return aGrupIndex - bGrupIndex;
+                    }
+                }
+                // Aynı kategoride ise sira alanına göre (varsa)
+                if (a.sira !== undefined && b.sira !== undefined) {
+                    return a.sira - b.sira;
+                }
+                return 0;
+            });
+        }
+
+        return products;
+    }, [initialProducts, activeTopCategory, activeSubCategory, searchTerm, hasUstGrup, topCategories]);
+
+    // Ürünleri kategoriye göre grupla (sadece "Tümü" seçiliyken)
+    const groupedProducts = useMemo(() => {
+        if (activeTopCategory !== "Tümü") {
+            return null; // Gruplama gerekmez
+        }
+
+        const groups: { categoryName: string; products: Product[] }[] = [];
+        let currentCategory = "";
+        let currentGroup: Product[] = [];
+
+        filteredProducts.forEach((product) => {
+            let categoryName: string;
+            if (hasUstGrup) {
+                // Üst grup varsa: "Üst Grup - Alt Grup" formatında göster
+                categoryName = product.ustGrupIsim && product.grupIsim 
+                    ? `${product.ustGrupIsim} - ${product.grupIsim}`
+                    : product.grupIsim || product.ustGrupIsim || "";
+            } else {
+                // Üst grup yoksa sadece grup ismini göster
+                categoryName = product.grupIsim;
+            }
+
+            if (categoryName !== currentCategory) {
+                // Yeni kategori başladı, önceki grubu kaydet
+                if (currentGroup.length > 0) {
+                    groups.push({ categoryName: currentCategory, products: currentGroup });
+                }
+                currentCategory = categoryName;
+                currentGroup = [product];
+            } else {
+                currentGroup.push(product);
+            }
+        });
+
+        // Son grubu da ekle
+        if (currentGroup.length > 0) {
+            groups.push({ categoryName: currentCategory, products: currentGroup });
+        }
+
+        return groups;
+    }, [filteredProducts, activeTopCategory, hasUstGrup]);
 
     const handleTopCategoryClick = (cat: string) => {
         if (activeTopCategory === cat) {
@@ -215,13 +291,13 @@ export default function MenuApp({ initialProducts, businessName, businessLogo }:
                                         {cat === "Tümü" ? <Search size={16} /> : <Utensils size={16} />}
                                         {cat}
                                     </span>
-                                    {hasUstGrup && activeTopCategory === cat && (
+                                    {hasUstGrup && activeTopCategory === cat && activeTopCategory !== "Tümü" && (
                                         <ChevronDown size={16} />
                                     )}
                                 </button>
 
                                 {/* Masaüstü Alt Kategori Listesi (Accordion) */}
-                                {hasUstGrup && activeTopCategory === cat && (
+                                {hasUstGrup && activeTopCategory === cat && activeTopCategory !== "Tümü" && (
                                     <div className="sub-cat-list pl-4 mt-2 flex flex-col gap-1 border-l-2 border-gray-100 ml-4">
                                         {subCategories.map((sub) => (
                                             <button
@@ -309,7 +385,7 @@ export default function MenuApp({ initialProducts, businessName, businessLogo }:
                     </div>
 
                     {/* --- Alt Kategoriler (Sadece Mobil İçin Pills) --- */}
-                    {hasUstGrup && subCategories.length > 0 && (
+                    {hasUstGrup && subCategories.length > 0 && activeTopCategory !== "Tümü" && (
                         <div className="sub-category-nav hidden-scrollbar mobile-only">
                             {subCategories.map((sub) => (
                                 <button
@@ -324,49 +400,104 @@ export default function MenuApp({ initialProducts, businessName, businessLogo }:
                     )}
 
                     {/* Ürün Listesi */}
-                    <div className="grid">
-                        {filteredProducts.map((product) => (
-                            <div
-                                key={`${product.grupIsim}-${product.urunAdi}-${product.id || Math.random()}`}
-                                className="product-card"
-                            >
-                                <div className="card-image-wrapper">
-                                    <img
-                                        src={product.resimYolu || "https://placehold.co/400x300?text=No+Image"}
-                                        alt={product.urunAdi}
-                                        className="card-img"
-                                        loading="lazy"
-                                    />
-                                </div>
-                                <div className="card-content">
-                                    <h3 className="product-title">{product.urunAdi}</h3>
-                                    <p className="product-desc">{product.aciklama}</p>
-                                    <div className="product-footer">
-                                        <span className="price-tag">{product.fiyat} ₺</span>
-                                        <button className="add-btn">
-                                            <ChefHat size={16} />
-                                        </button>
+                    {activeTopCategory === "Tümü" && groupedProducts ? (
+                        // "Tümü" seçiliyken kategori başlıklarıyla göster
+                        <div>
+                            {groupedProducts.map((group, groupIndex) => (
+                                <div key={group.categoryName}>
+                                    {/* Kategori Başlığı */}
+                                    <div style={{
+                                        marginTop: groupIndex > 0 ? '2rem' : '0',
+                                        marginBottom: '1rem',
+                                        paddingTop: groupIndex > 0 ? '1rem' : '0',
+                                        borderTop: groupIndex > 0 ? '2px solid #e5e7eb' : 'none',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '1rem'
+                                    }}>
+                                        <h2 style={{
+                                            fontSize: '1.25rem',
+                                            fontWeight: '600',
+                                            color: 'var(--text-primary)',
+                                            margin: 0,
+                                            textTransform: 'uppercase',
+                                            letterSpacing: '0.5px'
+                                        }}>
+                                            {group.categoryName}
+                                        </h2>
+                                        <div style={{
+                                            flex: 1,
+                                            height: '1px',
+                                            background: 'linear-gradient(to right, #e5e7eb, transparent)'
+                                        }} />
+                                    </div>
+                                    {/* Kategori Ürünleri */}
+                                    <div className="grid">
+                                        {group.products.map((product) => (
+                                            <div
+                                                key={`${product.grupIsim}-${product.urunAdi}-${product.id || Math.random()}`}
+                                                className="product-card"
+                                            >
+                                                <div className="card-image-wrapper">
+                                                    <img
+                                                        src={product.resimYolu || "https://placehold.co/400x300?text=No+Image"}
+                                                        alt={product.urunAdi}
+                                                        className="card-img"
+                                                        loading="lazy"
+                                                    />
+                                                </div>
+                                                <div className="card-content">
+                                                    <h3 className="product-title">{product.urunAdi}</h3>
+                                                    <p className="product-desc">{product.aciklama}</p>
+                                                    <div className="product-footer">
+                                                        <span className="price-tag">{product.fiyat} ₺</span>
+                                                        <button className="add-btn">
+                                                            <ChefHat size={16} />
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ))}
                                     </div>
                                 </div>
-                            </div>
-                        ))}
-                    </div>
+                            ))}
+                        </div>
+                    ) : (
+                        // Normal mod (kategori seçiliyken)
+                        <div className="grid">
+                            {filteredProducts.map((product) => (
+                                <div
+                                    key={`${product.grupIsim}-${product.urunAdi}-${product.id || Math.random()}`}
+                                    className="product-card"
+                                >
+                                    <div className="card-image-wrapper">
+                                        <img
+                                            src={product.resimYolu || "https://placehold.co/400x300?text=No+Image"}
+                                            alt={product.urunAdi}
+                                            className="card-img"
+                                            loading="lazy"
+                                        />
+                                    </div>
+                                    <div className="card-content">
+                                        <h3 className="product-title">{product.urunAdi}</h3>
+                                        <p className="product-desc">{product.aciklama}</p>
+                                        <div className="product-footer">
+                                            <span className="price-tag">{product.fiyat} ₺</span>
+                                            <button className="add-btn">
+                                                <ChefHat size={16} />
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
 
                     {filteredProducts.length === 0 && (
                         <div className="empty-state">
-                            {hasUstGrup && !activeTopCategory && !searchTerm ? (
-                                <>
-                                    <Utensils size={48} style={{ marginBottom: '1rem', opacity: 0.5 }} />
-                                    <h3>Hoş Geldiniz</h3>
-                                    <p>Lütfen menüden bir kategori seçiniz.</p>
-                                </>
-                            ) : (
-                                <>
-                                    <Search size={48} style={{ marginBottom: '1rem', opacity: 0.5 }} />
-                                    <h3>Ürün bulunamadı</h3>
-                                    <p>Bu kategoride henüz ürün yok veya arama sonucu boş.</p>
-                                </>
-                            )}
+                            <Search size={48} style={{ marginBottom: '1rem', opacity: 0.5 }} />
+                            <h3>Ürün bulunamadı</h3>
+                            <p>Bu kategoride henüz ürün yok veya arama sonucu boş.</p>
                         </div>
                     )}
                 </main>
