@@ -24,12 +24,12 @@ interface MenuAppProps {
 }
 
 export default function MenuApp({ initialProducts, businessName, businessLogo }: MenuAppProps) {
-    // Görünüm mantığını belirlemek için veriyi kontrol et
+    // Görünüm mantığını belirlemek için veriyi kontrol eder
     const hasUstGrup = useMemo(() => {
         return initialProducts.some(p => !!p.ustGrupIsim);
     }, [initialProducts]);
 
-    // 1. Üst Grupları (Top Categories) Çıkar
+    // 1. Üst Grupları Çıkar
     // Bu hesaplamayı state'den önce yapıyoruz ki state başlangıç değerini verebilelim
     const topCategories = useMemo(() => {
         if (hasUstGrup) {
@@ -37,7 +37,7 @@ export default function MenuApp({ initialProducts, businessName, businessLogo }:
             // API'den gelen sırayı koru, başa "Tümü" ekle
             return ["Tümü", ...tops];
         } else {
-            // Eski mantık: Sadece grup isimleri (Categories)
+            // Sadece grup isimleri (Categories) 
             const cats = Array.from(new Set(initialProducts.map((p) => p.grupIsim)));
             return ["Tümü", ...cats];
         }
@@ -97,9 +97,6 @@ export default function MenuApp({ initialProducts, businessName, businessLogo }:
 
     // --- Kategori Mantığı ---
     // topCategories yukarı taşındı.
-
-    // (Eski useEffect burada kaldırıldı)
-
     // 2. Alt Grupları (Sub Categories) Çıkar (Seçili Üst Gruba Göre)
     const subCategories = useMemo(() => {
         if (!hasUstGrup) return [];
@@ -234,7 +231,7 @@ export default function MenuApp({ initialProducts, businessName, businessLogo }:
             setActiveTopCategory(cat);
         }
         setIsDropdownOpen(false);
-        // window.scrollTo({ top: 0, behavior: "smooth" });
+        // window.scrollTo({ top: 0, behavior: "smooth" }); //bunu iptal ettik
     };
 
     const handleSubCategoryClick = (subCat: string) => {

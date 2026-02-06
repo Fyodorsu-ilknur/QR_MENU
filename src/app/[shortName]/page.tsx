@@ -22,7 +22,7 @@ async function getBusinessData(shortName: string): Promise<{ id: number; name: s
         const data: BusinessResponse = await res.json();
 
         if (data.basarili && data.isletmeler && data.isletmeler.length > 0) {
-            // API'den gelen işletme ismini birincil kaynak olarak kullan (eski haline döndürüldü)
+            // API'den gelen işletme ismini birincil kaynak olarak kullanır
             // Eğer API'den gelen isim boşsa, URL'deki kısa adı (shortName) kullan
             const apiName = data.isletmeler[0].isletmeAdi;
             const fallbackName = shortName.toLocaleUpperCase('tr-TR');
